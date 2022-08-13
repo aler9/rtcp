@@ -18,42 +18,57 @@ const (
 	pliLength = 2
 )
 
+// Header returns the Header associated with this packet.
+func (p PictureLossIndication) Header() Header {
+	return Header{
+		Count:  FormatPLI,
+		Type:   TypePayloadSpecificFeedback,
+		Length: pliLength,
+	}
+}
+
 // MarshalSize returns the size of the packet once marshaled.
 func (p PictureLossIndication) MarshalSize() int {
-	return headerLength + ssrcLength*2
+	return headerSize + ssrcLength*2
 }
 
 // Marshal encodes the PictureLossIndication in binary
-func (p PictureLossIndication) Marshal() ([]byte, error) {
+func (p PictureLossIndication) MarshalTo(buf []byte) (int, error) {
 	/*
 	 * PLI does not require parameters.  Therefore, the length field MUST be
 	 * 2, and there MUST NOT be any Feedback Control Information.
 	 *
 	 * The semantics of this FB message is independent of the payload type.
 	 */
-	rawPacket := make([]byte, p.MarshalSize())
-	packetBody := rawPacket[headerLength:]
+
+	_, err := p.Header().MarshalTo(buf)
+	if err != nil {
+		return 0, err
+	}
+
+	packetBody := buf[headerSize:]
 
 	binary.BigEndian.PutUint32(packetBody, p.SenderSSRC)
 	binary.BigEndian.PutUint32(packetBody[4:], p.MediaSSRC)
 
-	h := Header{
-		Count:  FormatPLI,
-		Type:   TypePayloadSpecificFeedback,
-		Length: pliLength,
-	}
-	hData, err := h.Marshal()
+	return headerSize + ssrcLength*2, nil
+}
+
+// Marshal encodes the PictureLossIndication in binary
+func (p PictureLossIndication) Marshal() ([]byte, error) {
+	buf := make([]byte, p.MarshalSize())
+
+	_, err := p.MarshalTo(buf)
 	if err != nil {
 		return nil, err
 	}
-	copy(rawPacket, hData)
 
-	return rawPacket, nil
+	return buf, nil
 }
 
 // Unmarshal decodes the PictureLossIndication from binary
 func (p *PictureLossIndication) Unmarshal(rawPacket []byte) error {
-	if len(rawPacket) < (headerLength + (ssrcLength * 2)) {
+	if len(rawPacket) < (headerSize + (ssrcLength * 2)) {
 		return errPacketTooShort
 	}
 
@@ -66,18 +81,9 @@ func (p *PictureLossIndication) Unmarshal(rawPacket []byte) error {
 		return errWrongType
 	}
 
-	p.SenderSSRC = binary.BigEndian.Uint32(rawPacket[headerLength:])
-	p.MediaSSRC = binary.BigEndian.Uint32(rawPacket[headerLength+ssrcLength:])
+	p.SenderSSRC = binary.BigEndian.Uint32(rawPacket[headerSize:])
+	p.MediaSSRC = binary.BigEndian.Uint32(rawPacket[headerSize+ssrcLength:])
 	return nil
-}
-
-// Header returns the Header associated with this packet.
-func (p *PictureLossIndication) Header() Header {
-	return Header{
-		Count:  FormatPLI,
-		Type:   TypePayloadSpecificFeedback,
-		Length: pliLength,
-	}
 }
 
 func (p *PictureLossIndication) String() string {

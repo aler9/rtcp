@@ -18,7 +18,7 @@ func (g Goodbye) MarshalSize() int {
 	srcsLength := len(g.Sources) * ssrcLength
 	reasonLength := len(g.Reason) + 1
 
-	l := headerLength + srcsLength + reasonLength
+	l := headerSize + srcsLength + reasonLength
 
 	// align to 32-bit boundary
 	return l + getPadding(l)
@@ -41,7 +41,7 @@ func (g Goodbye) Marshal() ([]byte, error) {
 	 */
 
 	rawPacket := make([]byte, g.MarshalSize())
-	packetBody := rawPacket[headerLength:]
+	packetBody := rawPacket[headerSize:]
 
 	if len(g.Sources) > countMax {
 		return nil, errTooManySources
@@ -63,11 +63,10 @@ func (g Goodbye) Marshal() ([]byte, error) {
 		copy(packetBody[reasonOffset+1:], reason)
 	}
 
-	hData, err := g.Header().Marshal()
+	_, err := g.Header().MarshalTo(rawPacket)
 	if err != nil {
 		return nil, err
 	}
-	copy(rawPacket, hData)
 
 	return rawPacket, nil
 }
@@ -103,13 +102,13 @@ func (g *Goodbye) Unmarshal(rawPacket []byte) error {
 
 	g.Sources = make([]uint32, header.Count)
 
-	reasonOffset := int(headerLength + header.Count*ssrcLength)
+	reasonOffset := int(headerSize + header.Count*ssrcLength)
 	if reasonOffset > len(rawPacket) {
 		return errPacketTooShort
 	}
 
 	for i := 0; i < int(header.Count); i++ {
-		offset := headerLength + i*ssrcLength
+		offset := headerSize + i*ssrcLength
 
 		g.Sources[i] = binary.BigEndian.Uint32(rawPacket[offset:])
 	}

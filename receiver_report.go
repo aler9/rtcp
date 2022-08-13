@@ -21,7 +21,7 @@ type ReceiverReport struct {
 
 const (
 	ssrcLength     = 4
-	rrSSRCOffset   = headerLength
+	rrSSRCOffset   = headerSize
 	rrReportOffset = rrSSRCOffset + ssrcLength
 )
 
@@ -31,7 +31,7 @@ func (r ReceiverReport) MarshalSize() int {
 	for _, rep := range r.Reports {
 		repsLength += rep.len()
 	}
-	return headerLength + ssrcLength + repsLength
+	return headerSize + ssrcLength + repsLength
 }
 
 // Marshal encodes the ReceiverReport in binary
@@ -65,7 +65,7 @@ func (r ReceiverReport) Marshal() ([]byte, error) {
 	 */
 
 	rawPacket := make([]byte, r.MarshalSize())
-	packetBody := rawPacket[headerLength:]
+	packetBody := rawPacket[headerSize:]
 
 	binary.BigEndian.PutUint32(packetBody, r.SSRC)
 
@@ -93,11 +93,10 @@ func (r ReceiverReport) Marshal() ([]byte, error) {
 
 	rawPacket = append(rawPacket, pe...)
 
-	hData, err := r.Header().Marshal()
+	_, err := r.Header().MarshalTo(rawPacket)
 	if err != nil {
 		return nil, err
 	}
-	copy(rawPacket, hData)
 
 	return rawPacket, nil
 }
@@ -132,7 +131,7 @@ func (r *ReceiverReport) Unmarshal(rawPacket []byte) error {
 	 *        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 	 */
 
-	if len(rawPacket) < (headerLength + ssrcLength) {
+	if len(rawPacket) < (headerSize + ssrcLength) {
 		return errPacketTooShort
 	}
 

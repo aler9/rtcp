@@ -295,12 +295,11 @@ func (r *RecvDelta) Unmarshal(rawPacket []byte) error {
 }
 
 const (
-	// the offset after header
-	baseSequenceNumberOffset = 8
-	packetStatusCountOffset  = 10
-	referenceTimeOffset      = 12
-	fbPktCountOffset         = 15
-	packetChunkOffset        = 16
+	baseSequenceNumberOffset = headerSize + 8
+	packetStatusCountOffset  = headerSize + 10
+	referenceTimeOffset      = headerSize + 12
+	fbPktCountOffset         = headerSize + 15
+	packetChunkOffset        = headerSize + 16
 )
 
 // TransportLayerCC for sender-BWE
@@ -347,7 +346,7 @@ type TransportLayerCC struct {
 // }
 
 func (t *TransportLayerCC) packetLen() uint16 {
-	n := uint16(headerLength + packetChunkOffset + len(t.PacketChunks)*2)
+	n := uint16(packetChunkOffset + len(t.PacketChunks)*2)
 	for _, d := range t.RecvDeltas {
 		if d.Type == TypeTCCPacketReceivedSmallDelta {
 			n++
@@ -392,14 +391,15 @@ func (t TransportLayerCC) MarshalSize() int {
 
 // Marshal encodes the TransportLayerCC in binary
 func (t TransportLayerCC) Marshal() ([]byte, error) {
-	header, err := t.Header.Marshal()
+	payload := make([]byte, t.MarshalSize())
+
+	_, err := t.Header.MarshalTo(payload)
 	if err != nil {
 		return nil, err
 	}
 
-	payload := make([]byte, t.MarshalSize()-headerLength)
-	binary.BigEndian.PutUint32(payload, t.SenderSSRC)
-	binary.BigEndian.PutUint32(payload[4:], t.MediaSSRC)
+	binary.BigEndian.PutUint32(payload[headerSize:], t.SenderSSRC)
+	binary.BigEndian.PutUint32(payload[headerSize+4:], t.MediaSSRC)
 	binary.BigEndian.PutUint16(payload[baseSequenceNumberOffset:], t.BaseSequenceNumber)
 	binary.BigEndian.PutUint16(payload[packetStatusCountOffset:], t.PacketStatusCount)
 	ReferenceTimeAndFbPktCount := appendNBitsToUint32(0, 24, t.ReferenceTime)
@@ -431,12 +431,12 @@ func (t TransportLayerCC) Marshal() ([]byte, error) {
 		payload[len(payload)-1] = uint8(t.MarshalSize() - int(t.packetLen()))
 	}
 
-	return append(header, payload...), nil
+	return payload, nil
 }
 
 // Unmarshal ..
 func (t *TransportLayerCC) Unmarshal(rawPacket []byte) error { //nolint:gocognit
-	if len(rawPacket) < (headerLength + ssrcLength) {
+	if len(rawPacket) < (headerSize + ssrcLength) {
 		return errPacketTooShort
 	}
 
@@ -448,7 +448,7 @@ func (t *TransportLayerCC) Unmarshal(rawPacket []byte) error { //nolint:gocognit
 	// header's length + payload's length
 	totalLength := 4 * (t.Header.Length + 1)
 
-	if totalLength < headerLength+packetChunkOffset {
+	if totalLength < packetChunkOffset {
 		return errPacketTooShort
 	}
 
@@ -460,14 +460,14 @@ func (t *TransportLayerCC) Unmarshal(rawPacket []byte) error { //nolint:gocognit
 		return errWrongType
 	}
 
-	t.SenderSSRC = binary.BigEndian.Uint32(rawPacket[headerLength:])
-	t.MediaSSRC = binary.BigEndian.Uint32(rawPacket[headerLength+ssrcLength:])
-	t.BaseSequenceNumber = binary.BigEndian.Uint16(rawPacket[headerLength+baseSequenceNumberOffset:])
-	t.PacketStatusCount = binary.BigEndian.Uint16(rawPacket[headerLength+packetStatusCountOffset:])
-	t.ReferenceTime = get24BitsFromBytes(rawPacket[headerLength+referenceTimeOffset : headerLength+referenceTimeOffset+3])
-	t.FbPktCount = rawPacket[headerLength+fbPktCountOffset]
+	t.SenderSSRC = binary.BigEndian.Uint32(rawPacket[headerSize:])
+	t.MediaSSRC = binary.BigEndian.Uint32(rawPacket[headerSize+ssrcLength:])
+	t.BaseSequenceNumber = binary.BigEndian.Uint16(rawPacket[baseSequenceNumberOffset:])
+	t.PacketStatusCount = binary.BigEndian.Uint16(rawPacket[packetStatusCountOffset:])
+	t.ReferenceTime = get24BitsFromBytes(rawPacket[referenceTimeOffset : referenceTimeOffset+3])
+	t.FbPktCount = rawPacket[fbPktCountOffset]
 
-	packetStatusPos := uint16(headerLength + packetChunkOffset)
+	packetStatusPos := uint16(packetChunkOffset)
 	var processedPacketNum uint16
 	for processedPacketNum < t.PacketStatusCount {
 		if packetStatusPos+packetStatusChunkLength >= totalLength {

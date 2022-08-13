@@ -109,14 +109,14 @@ func (b *CCFeedbackReport) Header() Header {
 
 // Marshal encodes the Congestion Control Feedback Report in binary
 func (b CCFeedbackReport) Marshal() ([]byte, error) {
-	header := b.Header()
-	headerBuf, err := header.Marshal()
+	buf := make([]byte, b.MarshalSize())
+
+	_, err := b.Header().MarshalTo(buf)
 	if err != nil {
 		return nil, err
 	}
-	buf := make([]byte, b.MarshalSize())
-	copy(buf[:headerLength], headerBuf)
-	binary.BigEndian.PutUint32(buf[headerLength:], b.SenderSSRC)
+
+	binary.BigEndian.PutUint32(buf[headerSize:], b.SenderSSRC)
 	offset := uint16(reportBlockOffset)
 	for _, block := range b.ReportBlocks {
 		b, err := block.marshal()
@@ -145,7 +145,7 @@ func (b CCFeedbackReport) String() string {
 
 // Unmarshal decodes the Congestion Control Feedback Report from binary
 func (b *CCFeedbackReport) Unmarshal(rawPacket []byte) error {
-	if len(rawPacket) < headerLength+ssrcLength+reportTimestampLength {
+	if len(rawPacket) < headerSize+ssrcLength+reportTimestampLength {
 		return errPacketTooShort
 	}
 
@@ -157,7 +157,7 @@ func (b *CCFeedbackReport) Unmarshal(rawPacket []byte) error {
 		return errWrongType
 	}
 
-	b.SenderSSRC = binary.BigEndian.Uint32(rawPacket[headerLength:])
+	b.SenderSSRC = binary.BigEndian.Uint32(rawPacket[headerSize:])
 
 	reportTimestampOffset := uint16(len(rawPacket) - reportTimestampLength)
 	b.ReportTimestamp = binary.BigEndian.Uint32(rawPacket[reportTimestampOffset:])

@@ -26,7 +26,7 @@ const (
 
 // MarshalSize returns the size of the packet once marshaled.
 func (p RapidResynchronizationRequest) MarshalSize() int {
-	return headerLength + rrrHeaderLength
+	return headerSize + rrrHeaderLength
 }
 
 // Marshal encodes the RapidResynchronizationRequest in binary
@@ -38,23 +38,22 @@ func (p RapidResynchronizationRequest) Marshal() ([]byte, error) {
 	 * The semantics of this FB message is independent of the payload type.
 	 */
 	rawPacket := make([]byte, p.MarshalSize())
-	packetBody := rawPacket[headerLength:]
+	packetBody := rawPacket[headerSize:]
 
 	binary.BigEndian.PutUint32(packetBody, p.SenderSSRC)
 	binary.BigEndian.PutUint32(packetBody[rrrMediaOffset:], p.MediaSSRC)
 
-	hData, err := p.Header().Marshal()
+	_, err := p.Header().MarshalTo(rawPacket)
 	if err != nil {
 		return nil, err
 	}
-	copy(rawPacket, hData)
 
 	return rawPacket, nil
 }
 
 // Unmarshal decodes the RapidResynchronizationRequest from binary
 func (p *RapidResynchronizationRequest) Unmarshal(rawPacket []byte) error {
-	if len(rawPacket) < (headerLength + (ssrcLength * 2)) {
+	if len(rawPacket) < (headerSize + (ssrcLength * 2)) {
 		return errPacketTooShort
 	}
 
@@ -67,8 +66,8 @@ func (p *RapidResynchronizationRequest) Unmarshal(rawPacket []byte) error {
 		return errWrongType
 	}
 
-	p.SenderSSRC = binary.BigEndian.Uint32(rawPacket[headerLength:])
-	p.MediaSSRC = binary.BigEndian.Uint32(rawPacket[headerLength+ssrcLength:])
+	p.SenderSSRC = binary.BigEndian.Uint32(rawPacket[headerSize:])
+	p.MediaSSRC = binary.BigEndian.Uint32(rawPacket[headerSize+ssrcLength:])
 	return nil
 }
 

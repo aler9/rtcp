@@ -88,12 +88,12 @@ func (n *NackPair) PacketList() []uint16 {
 
 const (
 	tlnLength  = 2
-	nackOffset = 8
+	nackOffset = headerSize + 8
 )
 
 // MarshalSize returns the size of the packet once marshaled.
 func (p TransportLayerNack) MarshalSize() int {
-	return headerLength + nackOffset + (len(p.Nacks) * 4)
+	return nackOffset + (len(p.Nacks) * 4)
 }
 
 // Marshal encodes the TransportLayerNack in binary
@@ -102,25 +102,27 @@ func (p TransportLayerNack) Marshal() ([]byte, error) {
 		return nil, errTooManyReports
 	}
 
-	rawPacket := make([]byte, p.MarshalSize()-headerLength)
-	binary.BigEndian.PutUint32(rawPacket, p.SenderSSRC)
-	binary.BigEndian.PutUint32(rawPacket[4:], p.MediaSSRC)
-	for i := 0; i < len(p.Nacks); i++ {
-		binary.BigEndian.PutUint16(rawPacket[nackOffset+(4*i):], p.Nacks[i].PacketID)
-		binary.BigEndian.PutUint16(rawPacket[nackOffset+(4*i)+2:], uint16(p.Nacks[i].LostPackets))
-	}
-	h := p.Header()
-	hData, err := h.Marshal()
+	rawPacket := make([]byte, p.MarshalSize())
+
+	_, err := p.Header().MarshalTo(rawPacket)
 	if err != nil {
 		return nil, err
 	}
 
-	return append(hData, rawPacket...), nil
+	binary.BigEndian.PutUint32(rawPacket[headerSize:], p.SenderSSRC)
+	binary.BigEndian.PutUint32(rawPacket[headerSize+4:], p.MediaSSRC)
+
+	for i := 0; i < len(p.Nacks); i++ {
+		binary.BigEndian.PutUint16(rawPacket[nackOffset+(4*i):], p.Nacks[i].PacketID)
+		binary.BigEndian.PutUint16(rawPacket[nackOffset+(4*i)+2:], uint16(p.Nacks[i].LostPackets))
+	}
+
+	return rawPacket, nil
 }
 
 // Unmarshal decodes the TransportLayerNack from binary
 func (p *TransportLayerNack) Unmarshal(rawPacket []byte) error {
-	if len(rawPacket) < (headerLength + ssrcLength) {
+	if len(rawPacket) < (headerSize + ssrcLength) {
 		return errPacketTooShort
 	}
 
@@ -129,7 +131,7 @@ func (p *TransportLayerNack) Unmarshal(rawPacket []byte) error {
 		return err
 	}
 
-	if len(rawPacket) < (headerLength + int(4*h.Length)) {
+	if len(rawPacket) < (headerSize + int(4*h.Length)) {
 		return errPacketTooShort
 	}
 
@@ -137,9 +139,10 @@ func (p *TransportLayerNack) Unmarshal(rawPacket []byte) error {
 		return errWrongType
 	}
 
-	p.SenderSSRC = binary.BigEndian.Uint32(rawPacket[headerLength:])
-	p.MediaSSRC = binary.BigEndian.Uint32(rawPacket[headerLength+ssrcLength:])
-	for i := headerLength + nackOffset; i < (headerLength + int(h.Length*4)); i += 4 {
+	p.SenderSSRC = binary.BigEndian.Uint32(rawPacket[headerSize:])
+	p.MediaSSRC = binary.BigEndian.Uint32(rawPacket[headerSize+ssrcLength:])
+
+	for i := nackOffset; i < (headerSize + int(h.Length*4)); i += 4 {
 		p.Nacks = append(p.Nacks, NackPair{
 			binary.BigEndian.Uint16(rawPacket[i:]),
 			PacketBitmap(binary.BigEndian.Uint16(rawPacket[i+2:])),

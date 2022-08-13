@@ -59,7 +59,7 @@ func (r SenderReport) MarshalSize() int {
 	for _, rep := range r.Reports {
 		repsLength += rep.len()
 	}
-	return headerLength + srHeaderLength + repsLength + len(r.ProfileExtensions)
+	return headerSize + srHeaderLength + repsLength + len(r.ProfileExtensions)
 }
 
 // Marshal encodes the SenderReport in binary
@@ -103,7 +103,7 @@ func (r SenderReport) Marshal() ([]byte, error) {
 	 */
 
 	rawPacket := make([]byte, r.MarshalSize())
-	packetBody := rawPacket[headerLength:]
+	packetBody := rawPacket[headerSize:]
 
 	binary.BigEndian.PutUint32(packetBody[srSSRCOffset:], r.SSRC)
 	binary.BigEndian.PutUint64(packetBody[srNTPOffset:], r.NTPTime)
@@ -127,11 +127,10 @@ func (r SenderReport) Marshal() ([]byte, error) {
 
 	copy(packetBody[offset:], r.ProfileExtensions)
 
-	hData, err := r.Header().Marshal()
+	_, err := r.Header().MarshalTo(rawPacket)
 	if err != nil {
 		return nil, err
 	}
-	copy(rawPacket, hData)
 
 	return rawPacket, nil
 }
@@ -176,7 +175,7 @@ func (r *SenderReport) Unmarshal(rawPacket []byte) error {
 	 *        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 	 */
 
-	if len(rawPacket) < (headerLength + srHeaderLength) {
+	if len(rawPacket) < (headerSize + srHeaderLength) {
 		return errPacketTooShort
 	}
 
@@ -189,7 +188,7 @@ func (r *SenderReport) Unmarshal(rawPacket []byte) error {
 		return errWrongType
 	}
 
-	packetBody := rawPacket[headerLength:]
+	packetBody := rawPacket[headerSize:]
 
 	r.SSRC = binary.BigEndian.Uint32(packetBody[srSSRCOffset:])
 	r.NTPTime = binary.BigEndian.Uint64(packetBody[srNTPOffset:])

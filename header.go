@@ -75,7 +75,7 @@ type Header struct {
 }
 
 const (
-	headerLength = 4
+	headerSize   = 4
 	versionShift = 6
 	versionMask  = 0x3
 	paddingShift = 5
@@ -85,8 +85,8 @@ const (
 	countMax     = (1 << 5) - 1
 )
 
-// Marshal encodes the Header in binary
-func (h Header) Marshal() ([]byte, error) {
+// MarshalTo encodes the Header in binary
+func (h Header) MarshalTo(buf []byte) (int, error) {
 	/*
 	 *  0                   1                   2                   3
 	 *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -94,29 +94,39 @@ func (h Header) Marshal() ([]byte, error) {
 	 * |V=2|P|    RC   |   PT=SR=200   |             length            |
 	 * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 	 */
-	rawPacket := make([]byte, headerLength)
-
-	rawPacket[0] |= rtpVersion << versionShift
+	buf[0] |= rtpVersion << versionShift
 
 	if h.Padding {
-		rawPacket[0] |= 1 << paddingShift
+		buf[0] |= 1 << paddingShift
 	}
 
 	if h.Count > 31 {
-		return nil, errInvalidHeader
+		return 0, errInvalidHeader
 	}
-	rawPacket[0] |= h.Count << countShift
+	buf[0] |= h.Count << countShift
 
-	rawPacket[1] = uint8(h.Type)
+	buf[1] = uint8(h.Type)
 
-	binary.BigEndian.PutUint16(rawPacket[2:], h.Length)
+	binary.BigEndian.PutUint16(buf[2:], h.Length)
 
-	return rawPacket, nil
+	return headerSize, nil
+}
+
+// Marshal encodes the Header in binary
+func (h Header) Marshal() ([]byte, error) {
+	buf := make([]byte, headerSize)
+
+	_, err := h.MarshalTo(buf)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf, nil
 }
 
 // Unmarshal decodes the Header from binary
 func (h *Header) Unmarshal(rawPacket []byte) error {
-	if len(rawPacket) < headerLength {
+	if len(rawPacket) < headerSize {
 		return errPacketTooShort
 	}
 

@@ -22,37 +22,49 @@ type FullIntraRequest struct {
 }
 
 const (
-	firOffset = 8
+	firOffset = headerSize + 8
 )
 
 var _ Packet = (*FullIntraRequest)(nil)
 
 // MarshalSize returns the size of the packet once marshaled.
 func (p FullIntraRequest) MarshalSize() int {
-	return headerLength + firOffset + len(p.FIR)*8
+	return firOffset + len(p.FIR)*8
 }
 
-// Marshal encodes the FullIntraRequest
-func (p FullIntraRequest) Marshal() ([]byte, error) {
-	rawPacket := make([]byte, p.MarshalSize()-headerLength)
-	binary.BigEndian.PutUint32(rawPacket, p.SenderSSRC)
-	binary.BigEndian.PutUint32(rawPacket[4:], p.MediaSSRC)
-	for i, fir := range p.FIR {
-		binary.BigEndian.PutUint32(rawPacket[firOffset+8*i:], fir.SSRC)
-		rawPacket[firOffset+8*i+4] = fir.SequenceNumber
+// MarshalTo encodes the FullIntraRequest
+func (p FullIntraRequest) MarshalTo(buf []byte) (int, error) {
+	_, err := p.Header().MarshalTo(buf)
+	if err != nil {
+		return 0, err
 	}
-	h := p.Header()
-	hData, err := h.Marshal()
+
+	binary.BigEndian.PutUint32(buf[headerSize:], p.SenderSSRC)
+	binary.BigEndian.PutUint32(buf[headerSize+4:], p.MediaSSRC)
+
+	for i, fir := range p.FIR {
+		binary.BigEndian.PutUint32(buf[firOffset+8*i:], fir.SSRC)
+		buf[firOffset+8*i+4] = fir.SequenceNumber
+	}
+
+	return firOffset + len(p.FIR)*8, nil
+}
+
+// Marshal encodes the FullIntraRequest in binary
+func (p FullIntraRequest) Marshal() ([]byte, error) {
+	buf := make([]byte, p.MarshalSize())
+
+	_, err := p.MarshalTo(buf)
 	if err != nil {
 		return nil, err
 	}
 
-	return append(hData, rawPacket...), nil
+	return buf, nil
 }
 
 // Unmarshal decodes the TransportLayerNack
 func (p *FullIntraRequest) Unmarshal(rawPacket []byte) error {
-	if len(rawPacket) < (headerLength + ssrcLength) {
+	if len(rawPacket) < (headerSize + ssrcLength) {
 		return errPacketTooShort
 	}
 
@@ -61,7 +73,7 @@ func (p *FullIntraRequest) Unmarshal(rawPacket []byte) error {
 		return err
 	}
 
-	if len(rawPacket) < (headerLength + int(4*h.Length)) {
+	if len(rawPacket) < (headerSize + int(4*h.Length)) {
 		return errPacketTooShort
 	}
 
@@ -69,9 +81,10 @@ func (p *FullIntraRequest) Unmarshal(rawPacket []byte) error {
 		return errWrongType
 	}
 
-	p.SenderSSRC = binary.BigEndian.Uint32(rawPacket[headerLength:])
-	p.MediaSSRC = binary.BigEndian.Uint32(rawPacket[headerLength+ssrcLength:])
-	for i := headerLength + firOffset; i < (headerLength + int(h.Length*4)); i += 8 {
+	p.SenderSSRC = binary.BigEndian.Uint32(rawPacket[headerSize:])
+	p.MediaSSRC = binary.BigEndian.Uint32(rawPacket[headerSize+ssrcLength:])
+
+	for i := firOffset; i < (headerSize + int(h.Length*4)); i += 8 {
 		p.FIR = append(p.FIR, FIREntry{
 			binary.BigEndian.Uint32(rawPacket[i:]),
 			rawPacket[i+4],

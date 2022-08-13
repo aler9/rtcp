@@ -80,7 +80,7 @@ func (s SourceDescription) MarshalSize() int {
 	for _, c := range s.Chunks {
 		chunksLength += c.len()
 	}
-	return headerLength + chunksLength
+	return headerSize + chunksLength
 }
 
 // Marshal encodes the SourceDescription in binary
@@ -104,7 +104,7 @@ func (s SourceDescription) Marshal() ([]byte, error) {
 	 */
 
 	rawPacket := make([]byte, s.MarshalSize())
-	packetBody := rawPacket[headerLength:]
+	packetBody := rawPacket[headerSize:]
 
 	chunkOffset := 0
 	for _, c := range s.Chunks {
@@ -120,11 +120,10 @@ func (s SourceDescription) Marshal() ([]byte, error) {
 		return nil, errTooManyChunks
 	}
 
-	hData, err := s.Header().Marshal()
+	_, err := s.Header().MarshalTo(rawPacket)
 	if err != nil {
 		return nil, err
 	}
-	copy(rawPacket, hData)
 
 	return rawPacket, nil
 }
@@ -158,7 +157,7 @@ func (s *SourceDescription) Unmarshal(rawPacket []byte) error {
 		return errWrongType
 	}
 
-	for i := headerLength; i < len(rawPacket); {
+	for i := headerSize; i < len(rawPacket); {
 		var chunk SourceDescriptionChunk
 		if err := chunk.Unmarshal(rawPacket[i:]); err != nil {
 			return err

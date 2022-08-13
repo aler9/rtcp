@@ -32,12 +32,12 @@ type SliceLossIndication struct {
 
 const (
 	sliLength = 2
-	sliOffset = 8
+	sliOffset = headerSize + 8
 )
 
 // MarshalSize returns the size of the packet once marshaled.
 func (p SliceLossIndication) MarshalSize() int {
-	return headerLength + sliOffset + (len(p.SLI) * 4)
+	return sliOffset + (len(p.SLI) * 4)
 }
 
 // Marshal encodes the SliceLossIndication in binary
@@ -46,26 +46,29 @@ func (p SliceLossIndication) Marshal() ([]byte, error) {
 		return nil, errTooManyReports
 	}
 
-	rawPacket := make([]byte, p.MarshalSize()-headerLength)
-	binary.BigEndian.PutUint32(rawPacket, p.SenderSSRC)
-	binary.BigEndian.PutUint32(rawPacket[4:], p.MediaSSRC)
+	rawPacket := make([]byte, p.MarshalSize())
+
+	_, err := p.Header().MarshalTo(rawPacket)
+	if err != nil {
+		return nil, err
+	}
+
+	binary.BigEndian.PutUint32(rawPacket[headerSize:], p.SenderSSRC)
+	binary.BigEndian.PutUint32(rawPacket[headerSize+4:], p.MediaSSRC)
+
 	for i, s := range p.SLI {
 		sli := ((uint32(s.First) & 0x1FFF) << 19) |
 			((uint32(s.Number) & 0x1FFF) << 6) |
 			(uint32(s.Picture) & 0x3F)
 		binary.BigEndian.PutUint32(rawPacket[sliOffset+(4*i):], sli)
 	}
-	hData, err := p.Header().Marshal()
-	if err != nil {
-		return nil, err
-	}
 
-	return append(hData, rawPacket...), nil
+	return rawPacket, nil
 }
 
 // Unmarshal decodes the SliceLossIndication from binary
 func (p *SliceLossIndication) Unmarshal(rawPacket []byte) error {
-	if len(rawPacket) < (headerLength + ssrcLength) {
+	if len(rawPacket) < (headerSize + ssrcLength) {
 		return errPacketTooShort
 	}
 
@@ -74,7 +77,7 @@ func (p *SliceLossIndication) Unmarshal(rawPacket []byte) error {
 		return err
 	}
 
-	if len(rawPacket) < (headerLength + int(4*h.Length)) {
+	if len(rawPacket) < (headerSize + int(4*h.Length)) {
 		return errPacketTooShort
 	}
 
@@ -82,9 +85,10 @@ func (p *SliceLossIndication) Unmarshal(rawPacket []byte) error {
 		return errWrongType
 	}
 
-	p.SenderSSRC = binary.BigEndian.Uint32(rawPacket[headerLength:])
-	p.MediaSSRC = binary.BigEndian.Uint32(rawPacket[headerLength+ssrcLength:])
-	for i := headerLength + sliOffset; i < (headerLength + int(h.Length*4)); i += 4 {
+	p.SenderSSRC = binary.BigEndian.Uint32(rawPacket[headerSize:])
+	p.MediaSSRC = binary.BigEndian.Uint32(rawPacket[headerSize+ssrcLength:])
+
+	for i := sliOffset; i < (headerSize + int(h.Length*4)); i += 4 {
 		sli := binary.BigEndian.Uint32(rawPacket[i:])
 		p.SLI = append(p.SLI, SLIEntry{
 			First:   uint16((sli >> 19) & 0x1FFF),

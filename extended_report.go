@@ -537,41 +537,48 @@ func (b *UnknownReportBlock) unpackBlockHeader() {
 
 // MarshalSize returns the size of the packet once marshaled.
 func (x ExtendedReport) MarshalSize() int {
-	return headerLength + wireSize(x)
+	return headerSize + wireSize(x)
 }
 
-// Marshal encodes the ExtendedReport in binary
-func (x ExtendedReport) Marshal() ([]byte, error) {
+// Header returns the Header associated with this packet.
+func (x ExtendedReport) Header() Header {
+	return Header{
+		Type:   TypeExtendedReport,
+		Length: uint16(x.MarshalSize()/4 - 1),
+	}
+}
+
+// MarshalTo encodes the ExtendedReport in binary
+func (x ExtendedReport) MarshalTo(buf []byte) (int, error) {
 	for _, p := range x.Reports {
 		p.setupBlockHeader()
 	}
 
-	length := wireSize(x)
-
-	// RTCP Header
-	header := Header{
-		Type:   TypeExtendedReport,
-		Length: uint16(length / 4),
-	}
-	headerBuffer, err := header.Marshal()
+	_, err := x.Header().MarshalTo(buf)
 	if err != nil {
-		return []byte{}, err
+		return 0, err
 	}
-	length += len(headerBuffer)
 
-	rawPacket := make([]byte, length)
-	buffer := packetBuffer{bytes: rawPacket}
+	buffer := packetBuffer{bytes: buf[headerSize:]}
 
-	err = buffer.write(headerBuffer)
-	if err != nil {
-		return []byte{}, err
-	}
 	err = buffer.write(x)
 	if err != nil {
-		return []byte{}, err
+		return 0, err
 	}
 
-	return rawPacket, nil
+	return len(buf), nil
+}
+
+// Marshal encodes the ExtendedReport in binary
+func (x *ExtendedReport) Marshal() ([]byte, error) {
+	buf := make([]byte, x.MarshalSize())
+
+	_, err := x.MarshalTo(buf)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf, nil
 }
 
 // Unmarshal decodes the ExtendedReport from binary
@@ -584,7 +591,7 @@ func (x *ExtendedReport) Unmarshal(b []byte) error {
 		return errWrongType
 	}
 
-	buffer := packetBuffer{bytes: b[headerLength:]}
+	buffer := packetBuffer{bytes: b[headerSize:]}
 	err := buffer.read(&x.SenderSSRC)
 	if err != nil {
 		return err
